@@ -406,7 +406,7 @@ def test_should_pass_for_valid_equal_sign_params(command):
 
 
 @patch(
-    'awslabs.aws_api_mcp_server.core.common.file_system_controls.ALLOW_UNRESTRICTED_FILE_ACCESS',
+    'awslabs.aws_api_mcp_server.core.common.file_system_controls.ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS',
     True,
 )
 def test_should_pass_for_valid_equal_sign_params_with_file_output():
@@ -608,7 +608,7 @@ def test_valid_expand_user_home_directory():
     error_message = str(exc_info.value)
     assert 'is outside the allowed working directory' in error_message
     assert (
-        'Set AWS_API_MCP_ALLOW_UNRESTRICTED_FILE_ACCESS=true to allow unrestricted file access'
+        'Set AWS_API_MCP_ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS=true to allow unrestricted file access'
         in error_message
     )
 

@@ -34,7 +34,7 @@ def test_unsafe_path_blocked():
 
 
 @patch(
-    'awslabs.aws_api_mcp_server.core.common.file_system_controls.ALLOW_UNRESTRICTED_FILE_ACCESS',
+    'awslabs.aws_api_mcp_server.core.common.file_system_controls.ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS',
     True,
 )
 def test_unrestricted_access_allows_unsafe_path():

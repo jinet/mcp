@@ -14,8 +14,8 @@
 
 import os
 from .config import (
-    ALLOW_UNRESTRICTED_FILE_ACCESS,
-    ALLOW_UNRESTRICTED_FILE_ACCESS_KEY,
+    ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS,
+    ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS_KEY,
     WORKING_DIRECTORY,
 )
 from pathlib import Path
@@ -33,7 +33,7 @@ def validate_file_path(file_path: str) -> str:
     Raises:
         ValueError: If the path is outside the working directory and unrestricted access is not allowed
     """
-    if ALLOW_UNRESTRICTED_FILE_ACCESS:
+    if ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS:
         return file_path
 
     # Convert to absolute path
@@ -46,7 +46,7 @@ def validate_file_path(file_path: str) -> str:
     except ValueError:
         raise ValueError(
             f"File path '{file_path}' is outside the allowed working directory '{WORKING_DIRECTORY}'. "
-            f'Set {ALLOW_UNRESTRICTED_FILE_ACCESS_KEY}=true to allow unrestricted file access.'
+            f'Set {ALLOW_UNRESTRICTED_LOCAL_FILE_ACCESS_KEY}=true to allow unrestricted file access.'
         )
 
     return absolute_path
