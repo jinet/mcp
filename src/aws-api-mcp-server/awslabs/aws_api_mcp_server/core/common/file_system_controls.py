@@ -13,37 +13,40 @@
 # limitations under the License.
 
 import os
+from .config import (
+    ALLOW_UNRESTRICTED_FILE_ACCESS,
+    ALLOW_UNRESTRICTED_FILE_ACCESS_KEY,
+    WORKING_DIRECTORY,
+)
 from pathlib import Path
-from .config import ALLOW_UNRESTRICTED_FILE_ACCESS, ALLOW_UNRESTRICTED_FILE_ACCESS_KEY, WORKING_DIRECTORY
 
 
 def validate_file_path(file_path: str) -> str:
-    """
-    Validate that a file path is within the allowed working directory.
-    
+    """Validate that a file path is within the allowed working directory.
+
     Args:
         file_path: The file path to validate
-        
+
     Returns:
         The validated absolute path
-        
+
     Raises:
         ValueError: If the path is outside the working directory and unrestricted access is not allowed
     """
     if ALLOW_UNRESTRICTED_FILE_ACCESS:
         return file_path
-    
+
     # Convert to absolute path
     absolute_path = os.path.abspath(file_path)
     working_directory = os.path.abspath(WORKING_DIRECTORY)
-    
+
     # Check if the path is within the working directory
     try:
         Path(absolute_path).resolve().relative_to(Path(working_directory).resolve())
     except ValueError:
         raise ValueError(
             f"File path '{file_path}' is outside the allowed working directory '{WORKING_DIRECTORY}'. "
-            f"Set {ALLOW_UNRESTRICTED_FILE_ACCESS_KEY}=true to allow unrestricted file access."
+            f'Set {ALLOW_UNRESTRICTED_FILE_ACCESS_KEY}=true to allow unrestricted file access.'
         )
-    
+
     return absolute_path

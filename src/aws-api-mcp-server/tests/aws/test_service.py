@@ -564,11 +564,11 @@ def test_interpret_command_creates_output_file_for_streaming_operations(
 ):
     """Test that interpret_command writes an output file for streaming operations with outfile parameter."""
     from awslabs.aws_api_mcp_server.core.common.config import WORKING_DIRECTORY
-    
+
     # Replace placeholder with actual working directory
     actual_command = command.format(working_dir=WORKING_DIRECTORY)
     actual_outfile = expected_outfile.format(working_dir=WORKING_DIRECTORY)
-    
+
     with patch_boto3():
         mock_open_side_effect, mock_files = create_file_open_mock(actual_outfile)
 

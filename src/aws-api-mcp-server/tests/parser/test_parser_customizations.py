@@ -138,9 +138,9 @@ def test_s3_cp_no_args():
 
 def test_s3_cp_with_source_and_dest():
     """Test aws s3 cp with source and destination."""
-    from awslabs.aws_api_mcp_server.core.common.config import WORKING_DIRECTORY
     import os
-    
+    from awslabs.aws_api_mcp_server.core.common.config import WORKING_DIRECTORY
+
     # Use working directory path instead of /tmp/
     local_file_path = os.path.join(WORKING_DIRECTORY, 'local-file.txt')
     result = parse(f'aws s3 cp {local_file_path} s3://my-bucket/')

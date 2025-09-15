@@ -14,28 +14,31 @@
 
 import os
 import pytest
-from unittest.mock import patch
 from awslabs.aws_api_mcp_server.core.common.config import WORKING_DIRECTORY
-from awslabs.aws_api_mcp_server.core.common.security import validate_file_path
+from awslabs.aws_api_mcp_server.core.common.file_system_controls import validate_file_path
+from unittest.mock import patch
 
 
 def test_safe_path_allowed():
     """Test that files within working directory are allowed."""
-    safe_path = os.path.join(WORKING_DIRECTORY, "safe_file.txt")
+    safe_path = os.path.join(WORKING_DIRECTORY, 'safe_file.txt')
     result = validate_file_path(safe_path)
     assert result == safe_path
 
 
 def test_unsafe_path_blocked():
     """Test that files outside working directory are blocked."""
-    unsafe_path = "/tmp/unsafe_file.txt"
+    unsafe_path = '/tmp/unsafe_file.txt'
     with pytest.raises(ValueError):
         validate_file_path(unsafe_path)
 
 
-@patch('awslabs.aws_api_mcp_server.core.common.security.ALLOW_UNRESTRICTED_FILE_ACCESS', True)
+@patch(
+    'awslabs.aws_api_mcp_server.core.common.file_system_controls.ALLOW_UNRESTRICTED_FILE_ACCESS',
+    True,
+)
 def test_unrestricted_access_allows_unsafe_path():
     """Test that unrestricted access allows files outside working directory."""
-    unsafe_path = "/tmp/unsafe_file.txt"
+    unsafe_path = '/tmp/unsafe_file.txt'
     result = validate_file_path(unsafe_path)
     assert result == unsafe_path

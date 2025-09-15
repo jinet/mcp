@@ -26,7 +26,6 @@ from ..aws.services import (
 from ..common.command import IRCommand, OutputFile
 from ..common.command_metadata import CommandMetadata
 from ..common.config import AWS_API_MCP_PROFILE_NAME, get_region
-from ..common.security import validate_file_path
 from ..common.errors import (
     AwsApiMcpError,
     ClientSideFilterError,
@@ -53,6 +52,7 @@ from ..common.errors import (
     UnknownFiltersError,
     UnsupportedFilterError,
 )
+from ..common.file_system_controls import validate_file_path
 from ..common.helpers import expand_user_home_directory
 from .custom_validators.botocore_param_validator import BotoCoreParamValidator
 from .custom_validators.ec2_validator import validate_ec2_parameter_values
@@ -746,22 +746,23 @@ def _validate_request_serialization(
         ) from err
 
 
-
-
-
-def _validate_file_paths(command_metadata: CommandMetadata, parsed_args: ParsedOperationArgs|None, parameters: dict[str, Any]):
+def _validate_file_paths(
+    command_metadata: CommandMetadata,
+    parsed_args: ParsedOperationArgs | None,
+    parameters: dict[str, Any],
+):
     """Validate all file paths in the command."""
     from ..common.file_operations import extract_file_paths_from_parameters
-    
+
     # Validate --outfile parameter for streaming operations
     if command_metadata.has_streaming_output and parsed_args:
         output_file_path = parsed_args.operation_args.outfile
         if output_file_path != '-' and not os.path.isabs(Path(output_file_path)):
             raise ValueError(f'{output_file_path} should be an absolute path')
-        
+
         if output_file_path != '-':
             validate_file_path(output_file_path)
-    
+
     # Extract and validate all file paths using comprehensive detection
     file_paths = extract_file_paths_from_parameters(command_metadata, parameters)
     for file_path in file_paths:
@@ -773,10 +774,10 @@ def _validate_output_file(command_metadata: CommandMetadata, parsed_args: Parsed
         output_file_path = parsed_args.operation_args.outfile
         if output_file_path != '-' and not os.path.isabs(Path(output_file_path)):
             raise ValueError(f'{output_file_path} should be an absolute path')
-        
+
         # Validate file path is within working directory
         if output_file_path != '-':
-            validate_file_path(output_file_path)    
+            validate_file_path(output_file_path)
 
 
 def _validate_file_path(file_path: str, service: str, operation: str):
@@ -809,9 +810,8 @@ def _construct_command(
     parsed_args: ParsedOperationArgs | None = None,
     operation_model: OperationModel | None = None,
 ) -> IRCommand:
-    
-    _validate_file_paths(command_metadata, parsed_args, parameters)    
-    
+    _validate_file_paths(command_metadata, parsed_args, parameters)
+
     profile = getattr(global_args, 'profile', None)
     region = (
         getattr(global_args, 'region', None)
