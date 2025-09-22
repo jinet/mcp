@@ -26,6 +26,7 @@ from .core.aws.service import (
 from .core.common.config import (
     DEFAULT_REGION,
     ENABLE_AGENT_SCRIPTS,
+    ENABLE_OTEL_TRACES,
     FASTMCP_LOG_LEVEL,
     HOST,
     PORT,
@@ -42,6 +43,7 @@ from .core.common.models import (
     AwsCliAliasResponse,
     ProgramInterpretationResponse,
 )
+from .core.common.tracing import trace_manager
 from .core.kb import knowledge_base
 from .core.metadata.read_only_operations_list import ReadOnlyOperations, get_read_only_operations
 from .core.security.policy import PolicyDecision
@@ -64,6 +66,17 @@ logger.add(log_file, rotation='10 MB', retention='7 days')
 
 server = FastMCP(name='AWS-API-MCP', log_level=FASTMCP_LOG_LEVEL, host=HOST, port=PORT)
 READ_OPERATIONS_INDEX: Optional[ReadOnlyOperations] = None
+
+if ENABLE_OTEL_TRACES:
+    original_get_capabilities = server._mcp_server.get_capabilities
+
+    def enhanced_get_capabilities(notification_options, experimental_capabilities=None):
+        if experimental_capabilities is None:
+            experimental_capabilities = {}
+        experimental_capabilities['otel'] = {'traces': True}
+        return original_get_capabilities(notification_options, experimental_capabilities)
+
+    server._mcp_server.get_capabilities = enhanced_get_capabilities
 
 
 @server.tool(
@@ -134,12 +147,30 @@ async def suggest_aws_commands(
 ) -> dict[str, Any] | AwsApiMcpServerErrorResponse:
     """Suggest AWS CLI commands based on the provided query."""
     logger.info('Suggesting AWS commands for query: {}', query)
+    trace_token = ctx.meta.get('traceToken') if ctx.meta else None
+
     if not query.strip():
         error_message = 'Empty query provided'
         await ctx.error(error_message)
         return AwsApiMcpServerErrorResponse(detail=error_message)
+
     try:
-        suggestions = knowledge_base.get_suggestions(query)
+        if ENABLE_OTEL_TRACES:
+            with otel_manager.trace_operation(
+                'suggest_aws_commands',
+                {'query': query[:100]},  # Truncate for brevity
+            ):
+                suggestions = knowledge_base.get_suggestions(query)
+
+                if trace_token:
+                    resource_spans = otel_manager.get_resource_spans()
+                    await ctx.session.send_notification(
+                        'notifications/otel/trace',
+                        {'traceToken': trace_token, 'resourceSpans': [resource_spans]},
+                    )
+        else:
+            suggestions = knowledge_base.get_suggestions(query)
+
         logger.info(
             'Suggested commands: {}',
             [suggestion.get('command') for suggestion in suggestions.get('suggestions', {})],
@@ -192,6 +223,7 @@ async def suggest_aws_commands(
         openWorldHint=True,
     ),
 )
+@trace_manager.instrument('aws_cli_command')
 async def call_aws(
     cli_command: Annotated[
         str, Field(description='The complete AWS CLI command to execute. MUST start with "aws"')
@@ -203,9 +235,37 @@ async def call_aws(
     ] = None,
 ) -> ProgramInterpretationResponse | AwsApiMcpServerErrorResponse | AwsCliAliasResponse:
     """Call AWS with the given CLI command and return the result as a dictionary."""
+    trace_token = None
     try:
-        ir = translate_cli_to_ir(cli_command)
-        ir_validation = validate(ir)
+        if hasattr(ctx, 'request_context') and ctx.request_context:
+            request = getattr(ctx.request_context, 'request', None)
+            if request and hasattr(request, 'params') and request.params:
+                meta = getattr(request.params, '_meta', None)
+                if meta:
+                    trace_token = getattr(meta, 'traceToken', None)
+    except Exception:
+        pass
+
+    result = await _execute_aws_command(cli_command, ctx, max_results)
+
+    if trace_token and ENABLE_OTEL_TRACES:
+        resource_spans = trace_manager.get_resource_spans()
+        await ctx.session.send_notification(
+            'notifications/otel/trace',
+            {'traceToken': trace_token, 'resourceSpans': [resource_spans]},
+        )
+
+    return result
+
+
+async def _execute_aws_command(
+    cli_command: str, ctx: Context, max_results: int | None
+) -> ProgramInterpretationResponse | AwsApiMcpServerErrorResponse | AwsCliAliasResponse:
+    """Call AWS with the given CLI command and return the result as a dictionary."""
+    try:
+        with trace_manager.trace('command_validation'):
+            ir = translate_cli_to_ir(cli_command)
+            ir_validation = validate(ir)
 
         if not ir.command or ir_validation.validation_failed:
             error_message = (
@@ -259,17 +319,19 @@ async def call_aws(
                 await request_consent(cli_command, ctx)
 
         if ir.command and ir.command.is_awscli_customization:
-            response: AwsCliAliasResponse | AwsApiMcpServerErrorResponse = (
-                execute_awscli_customization(cli_command, ir.command)
-            )
+            with trace_manager.trace('awscli_customization'):
+                response: AwsCliAliasResponse | AwsApiMcpServerErrorResponse = (
+                    execute_awscli_customization(cli_command, ir.command)
+                )
             if isinstance(response, AwsApiMcpServerErrorResponse):
                 await ctx.error(response.detail)
             return response
 
-        return interpret_command(
-            cli_command=cli_command,
-            max_results=max_results,
-        )
+        with trace_manager.trace('command_execution'):
+            return interpret_command(
+                cli_command=cli_command,
+                max_results=max_results,
+            )
     except NoCredentialsError:
         error_message = (
             'Error while executing the command: No AWS credentials found. '
@@ -325,8 +387,23 @@ if ENABLE_AGENT_SCRIPTS:
         ctx: Context,
     ) -> str | AwsApiMcpServerErrorResponse:
         """Retrieve full script content given a script name."""
+        trace_token = ctx.meta.get('traceToken') if ctx.meta else None
+
         try:
-            script = AGENT_SCRIPTS_MANAGER.get_script(script_name)
+            if ENABLE_OTEL_TRACES:
+                with otel_manager.trace_operation(
+                    'get_execution_plan', {'script_name': script_name}
+                ):
+                    script = AGENT_SCRIPTS_MANAGER.get_script(script_name)
+
+                    if trace_token:
+                        resource_spans = otel_manager.get_resource_spans()
+                        await ctx.session.send_notification(
+                            'notifications/otel/trace',
+                            {'traceToken': trace_token, 'resourceSpans': [resource_spans]},
+                        )
+            else:
+                script = AGENT_SCRIPTS_MANAGER.get_script(script_name)
 
             if not script:
                 error_message = f'Script {script_name} not found'
